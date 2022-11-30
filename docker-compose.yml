@@ -1,0 +1,108 @@
+services:
+  postgres:
+    image: postgis/postgis:13-3.2
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-geonature2db}
+      - POSTGRES_USER=${POSTGRES_USER:-geonatadmin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-geonatpasswd}
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d/
+      - postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis:/data
+
+  usershub:
+    image: ghcr.io/pnx-si/usershub:develop
+    build: ./UsersHub/
+    depends_on:
+      - postgres
+    volumes:
+      - ./config/usershub/:/dist/config/
+    user: ${UID:-1000}:${GID:-1000}
+    environment:
+      - USERSHUB_URL_APPLICATION="http://localhost:8081/usershub"
+      - USERSHUB_SQLALCHEMY_DATABASE_URI=postgresql://${POSTGRES_USER:-geonatadmin}:${POSTGRES_PASSWORD:-geonatpasswd}@postgres:5432/${POSTGRES_DB:-geonature2db}
+      - USERSHUB_SETTINGS=${USERSHUB_SETTINGS:-config.py}
+      - PYTHONPATH=/dist/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.usershub.rule=Host(`localhost`) && PathPrefix(`/usershub`)"
+      - "traefik.http.routers.usershub.entrypoints=web"
+
+  taxhub:
+    image: ghcr.io/pnx-si/taxhub:develop
+    build: ./TaxHub/
+    depends_on:
+      - postgres
+    volumes:
+      - ./config/taxhub/:/dist/config/
+    user: ${UID:-1000}:${GID:-1000}
+    environment:
+      - TAXHUB_APPLICATION_ROOT="/taxhub"
+      - TAXHUB_SQLALCHEMY_DATABASE_URI=postgresql://${POSTGRES_USER:-geonatadmin}:${POSTGRES_PASSWORD:-geonatpasswd}@postgres:5432/${POSTGRES_DB:-geonature2db}
+      - TAXHUB_SETTINGS=${TAXHUB_SETTINGS:-config.py}
+      - PYTHONPATH=/dist/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.taxhub.rule=Host(`localhost`) && PathPrefix(`/taxhub`)"
+      - "traefik.http.routers.taxhub.entrypoints=web"
+
+  geonature-backend:
+    image: ghcr.io/bouttier/geonature-backend:feat-docker-action
+    build:
+      context: ./GeoNature/
+      dockerfile: ./backend/Dockerfile
+      target: prod-full
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./config/geonature/:/dist/config/
+    user: ${UID:-1000}:${GID:-1000}
+    environment:
+      - GEONATURE_SQLALCHEMY_DATABASE_URI=postgresql://${POSTGRES_USER:-geonatadmin}:${POSTGRES_PASSWORD:-geonatpasswd}@postgres:5432/${POSTGRES_DB:-geonature2db}
+      - GEONATURE_SECRET_KEY="8a7d773f1153193a388511de4cfe2535"
+      - GEONATURE_API_ENDPOINT="http://localhost:8081/geonature/api"
+      - GEONATURE_API_TAXHUB="http://localhost:8081/taxhub/api"
+      - GEONATURE_URL_APPLICATION="http://localhost:8081/geonature/"
+    #  - GEONATURE_CONFIG_FILE=${GEONATURE_CONFIG_FILE:-/dist/config/geonature_config.toml}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.geonature-api.rule=Host(`localhost`) && PathPrefix(`/geonature/api`)"
+      - "traefik.http.routers.geonature-api.entrypoints=web"
+
+  geonature-frontend:
+    image: ghcr.io/bouttier/geonature-frontend:feat-docker-action
+    build:
+      context: ./GeoNature/
+      dockerfile: ./frontend/Dockerfile
+      target: prod-full
+    environment:
+      - NGINX_LOCATION=/geonature
+    volumes:
+      - ./config/nginx/templates:/etc/nginx/templates
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.geonature.rule=Host(`localhost`) && PathPrefix(`/geonature`)"
+      - "traefik.http.routers.geonature.entrypoints=web"
+
+  traefik:
+    image: traefik:2.9
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:8081"
+    volumes:
+      #- ./config/traefik/:/etc/traefik/
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - 8080:8080
+      - 8081:8081
+
+volumes:
+  postgres:
+  redis:
