@@ -1,10 +1,6 @@
 # GeoNature Docker Services
 
-Ce dépôt permet de déployer automatiquement et facilement GeoNature, UsersHub dans un environnement dockerisé et accessible en HTTPS. De plus, celui-ci fournit une image Docker de GeoNature contenant, outre les modules du cœur (Occtax, Occhab, Validation, Import), les modules suivants :
-
-- [Export](https://github.com/PnX-SI/gn_module_exports)
-- [Dashboard](https://github.com/PnX-SI/gn_module_dashboard)
-- [Monitorings](https://github.com/PnX-SI/gn_module_monitorings)
+Ce dépôt permet de déployer automatiquement et facilement GeoNature, UsersHub dans un environnement dockerisé et accessible en HTTPS.
 
 ## Démarrage rapide
 
@@ -103,13 +99,6 @@ Pour des informations spécifique sur le mode développement, voir la section [L
 
 Pour en savoir plus (lancer des commandes `geonature`, accéder à la BDD, intégrer le MNT, modifier votre domaine,...), consultez la [FAQ GeoNature](https://github.com/PnX-SI/GeoNature-Docker-services/blob/main/docs/faq.md).
 
-## Images Docker publiées
-
-Une action permet la publication automatique d'images Docker frontend et backend de GeoNature sur [les packages du dépôt](https://github.com/orgs/PnX-SI/packages?repo_name=GeoNature-Docker-services) :
-
-- `ghcr.io/pnx-si/geonature-frontend-extra`
-- `ghcr.io/pnx-si/geonature-backend-extra`
-
 Ces images sont le pendant de [celles publiées sur le dépôt de GeoNature](https://github.com/orgs/PnX-SI/packages?repo_name=GeoNature) mais contiennent en supplément les modules externes pré-cités en introduction.
 
 ## <a name="dev"></a> Lancer une instance de développement
@@ -156,6 +145,7 @@ Assurez-vous de ne pas avoir activé la feature Bake de docker `COMPOSE_BAKE=tru
 Selon la nature de votre problème, vous pouvez créer une issue sur notre GitHub ou nous contacter [sur Element](https://matrix.to/#/#geonature:matrix.org)
 
 ## Liens utiles
+
 ### GeoNature
 
 - [Dépôt](https://github.com/PnX-SI/GeoNature)
@@ -168,3 +158,11 @@ Selon la nature de votre problème, vous pouvez créer une issue sur notre GitHu
 
 - [Dépôt](https://github.com/PnX-SI/UsersHub)
 - [`Dockerfile`](https://github.com/PnX-SI/UsersHub/blob/master/Dockerfile)
+
+## Objectifs & Justifications
+
+Ce dépôt vise avant tout la simplicité afin de faciliter au mieux le déploiement de GeoNature via Docker Compose. Il ne cherche pas à couvrir l’ensemble des use-cases de toutes les structures ! Ainsi, on ne trouvera dans `.env.sample` que des variables pour lesquelles y a un intérêt réel de modification pour une installation fonctionnelle (donc pas `POSTGRES_USER` par exemple). Le fichier `docker-compose.yml` contient quelques variables supplémentaires avec une valeur par défaut par commodité, mais là encore le but n’est pas d’introduire une variable pour chaque paramètre modifiable. Pour le reste, il y a `docker-compose.override.yml` ;-) 
+
+- **`TRAEFIK_HTTPS_PORT` doit être définie mais vide si utilisation du port 443 :** Sa définition permet de définir automatiquement `BASE_PROTOCOL=https`, sans pour autant rajouter `:443` dans les URLs.
+- **Traefik bind en interne le port exposé :** Il aurait été possible de bind le port 443, tout en exposant le port `${TRAEFIK_HTTPS_PORT}`, mais cela peut amener à des redirections incorrectes HTTP vers HTTPS par la règle `entrypoints.web.http.redirections.entrypoint.to=websecure`.
+- **Utilisation de variable d’environnement pour configurer Traefik :** La section `command` (liste) se trouve entièrement remplacé lorsque overridé dans un autre fichier. À l’inverse, `environment` (mapping) est fusionnée, permettant de rajouter d’autres paramètres de configuration.

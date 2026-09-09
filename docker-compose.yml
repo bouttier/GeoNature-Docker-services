@@ -2,11 +2,7 @@ x-restart-policy: &restart-policy
   restart: ${RESTART_POLICY:-unless-stopped}
 
 x-defaults: &defaults
-  user: ${UID}:${GID}
-
-x-env-defaults: &env-defaults
-  http_proxy: ${HTTP_PROXY:-}
-  https_proxy: ${HTTPS_PROXY:-}
+  user: ${UID:-0}:${GID:-0}
 
 x-geonature-depends-on-defaults: &geonature-depends-on-defaults
   redis:
@@ -14,54 +10,42 @@ x-geonature-depends-on-defaults: &geonature-depends-on-defaults
   postgres:
     condition: service_healthy
 
+x-env: &env
+  TZ: "${TIMEZONE:-Europe/Paris}"  # show logs timestamp in local TZ!
+
 x-geonature-backend-env: &geonature-backend-env
-  <<: *env-defaults
-  GEONATURE_SQLALCHEMY_DATABASE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
-  GEONATURE_URL_APPLICATION: ${GEONATURE_FRONTEND_PROTOCOL}://${GEONATURE_FRONTEND_HOSTPORT}${GEONATURE_FRONTEND_PREFIX}
-  GEONATURE_API_ENDPOINT: ${GEONATURE_BACKEND_PROTOCOL}://${GEONATURE_BACKEND_HOSTPORT}${GEONATURE_BACKEND_PREFIX}
+  <<: *env
+  GEONATURE_SKIP_POPULATE_DB: true
+  GEONATURE_SQLALCHEMY_DATABASE_URI: postgresql://${POSTGRES_USER:-geonatadmin}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-geonature2db}
+  GEONATURE_URL_APPLICATION: ${GEONATURE_URL_APPLICATION}
+  GEONATURE_API_ENDPOINT: ${GEONATURE_API_ENDPOINT}
   GEONATURE_CONFIG_FILE: ${GEONATURE_CONFIG_FILE:-/dist/config/geonature_config.toml}
   GEONATURE_CELERY__broker_url: ${GEONATURE_CELERY__broker_url:-redis://redis}
   GEONATURE_CELERY__result_backend: ${GEONATURE_CELERY__result_backend:-redis://redis}
+  DATA_DIRECTORY: ${GEONATURE_CACHE_FOLDER:-/dist/geonature/cache}
+
 
 x-geonature-backend-defaults: &geonature-backend-defaults
   <<: *defaults
-  image: ${GEONATURE_BACKEND_EXTRA_IMAGE}
+  image: ${GEONATURE_BACKEND_IMAGE:-ghcr.io/pnx-si/geonature-backend-extra:latest}
   depends_on:
     <<: *geonature-depends-on-defaults
   volumes:
     - ./config/geonature:/dist/config
-    - ./data/geonature/media:${GEONATURE_MEDIA_FOLDER:-/dist/media}
-    - ./data/geonature/custom:${GEONATURE_CUSTOM_STATIC_FOLDER:-/dist/custom}
+    - ./data/geonature/media:${GEONATURE_MEDIA_FOLDER:-/dist/geonature/media}
+    - ./data/geonature/custom:${GEONATURE_CUSTOM_STATIC_FOLDER:-/dist/geonature/custom}
+    - ./data/geonature/cache:${GEONATURE_CACHE_FOLDER:-/dist/geonature/cache}
   environment:
     <<: *geonature-backend-env
 
 services:
-  traefik:
-    <<: *restart-policy
-    image: traefik:2.10.4
-    command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entryPoints.web.address=:${HTTP_PORT:-80}"
-      - "--entryPoints.web.http.redirections.entrypoint.to=:${HTTPS_PORT:-443}"
-      - "--entryPoints.web.http.redirections.entrypoint.scheme=https"
-      - "--entryPoints.websecure.address=:${HTTPS_PORT:-443}"
-      - "--certificatesResolvers.acme-resolver.acme.email=${ACME_EMAIL}"
-      - "--certificatesResolvers.acme-resolver.acme.storage=/etc/traefik/certs/acme.json"
-      - "--certificatesResolvers.acme-resolver.acme.tlsChallenge=true"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./config/traefik:/etc/traefik/dynamic
-      - ./data/traefik/certs:/etc/traefik/certs
-    ports:
-      - ${HTTP_PORT:-80}:80
-      - ${HTTPS_PORT:-443}:443
-
   redis:
     <<: *restart-policy
     image: ${REDIS_IMAGE:-redis:7-alpine}
     volumes:
       - redis:/data
+    environment:
+      <<: *env
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -72,10 +56,10 @@ services:
     <<: *restart-policy
     image: ${POSTGRES_IMAGE:-postgis/postgis:15-3.4}
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      <<: *env
+      POSTGRES_DB: ${POSTGRES_DB:-geonature2db}
+      POSTGRES_USER: ${POSTGRES_USER:-geonatadmin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGPORT: ${POSTGRES_PORT:-5432}
     volumes:
       - ./assets/postgres/initdb:/docker-entrypoint-initdb.d/
       - postgres:/var/lib/postgresql/data
@@ -86,13 +70,13 @@ services:
           "CMD",
           "pg_isready",
           "-d",
-          "${POSTGRES_DB}",
+          "${POSTGRES_DB:-geonature2db}",
           "-U",
-          "${POSTGRES_USER}",
+          "${POSTGRES_USER:-geonatadmin}",
           "-h",
           "localhost",
           "-p",
-          "${POSTGRES_PORT}",
+          "5432",
         ]
       interval: 10s
       timeout: 5s
@@ -100,7 +84,7 @@ services:
 
   usershub:
     <<: [*restart-policy, *defaults]
-    image: ${USERSHUB_IMAGE}
+    image: ${USERSHUB_IMAGE:-ghcr.io/pnx-si/usershub:latest}
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,26 +92,24 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./config/usershub:/dist/config/
+    ports:
+      - ${USERSHUB_PORT}:5001
     environment:
-      <<: *env-defaults
-      USERSHUB_URL_APPLICATION: "${USERSHUB_PROTOCOL}://${USERSHUB_HOSTPORT}${USERSHUB_PREFIX}"
-      USERSHUB_SQLALCHEMY_DATABASE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+      <<: *env
+      USERSHUB_URL_APPLICATION: "${USERSHUB_URL_APPLICATION}"
+      USERSHUB_SQLALCHEMY_DATABASE_URI: postgresql://${POSTGRES_USER:-geonatadmin}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-geonature2db}
       USERSHUB_SETTINGS: ${USERSHUB_SETTINGS:-/dist/config/config.py}
       USERSHUB_ACTIVATE_APP: ${USERSHUB_ACTIVATE_APP:-true}
       USERSHUB_ACTIVATE_API: ${USERSHUB_ACTIVATE_API:-true}
       USERSHUB_COOKIE_EXPIRATION: ${USERSHUB_COOKIE_EXPIRATION:-3600}
       USERSHUB_FILL_MD5_PASS: ${USERSHUB_FILL_MD5_PASS:-false}
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.usershub.rule=Host(`${USERSHUB_HOST}`) && PathPrefix(`${USERSHUB_PREFIX}`)"
-      - "traefik.http.routers.usershub.entrypoints=websecure"
-      - "traefik.http.routers.usershub.tls.certResolver=acme-resolver"
 
   geonature-install-db:
     <<: *geonature-backend-defaults
     command: "geonature permissions supergrant --yes ${GEONATURE_SUPERGRANT_ARGS:---help}"
     environment:
       <<: *geonature-backend-env
+      GEONATURE_SKIP_POPULATE_DB: false
       srid_local: ${GEONATURE_DB_LOCAL_SRID}
       add_sample_data: ${GEONATURE_DB_ADD_SAMPLE_DATA:-false}
       install_bdc_statuts: ${GEONATURE_DB_INSTALL_BDC_STATUTS:-true}
@@ -143,8 +125,12 @@ services:
       <<: *geonature-depends-on-defaults
       geonature-install-db:
         condition: service_completed_successfully
-    entrypoint: []
-    command: celery -A geonature.celery_app:app worker --beat --schedule-filename=/dist/media/celerybeat-schedule.db
+    command:
+      [
+        "celery", "-A", "geonature.celery_app:app", "worker", "--beat",
+        "--loglevel=${GEONATURE_WORKER_LOG_LEVEL:-INFO}",
+        "--schedule-filename=/dist/geonature/cache/celerybeat-schedule.db"
+      ]
 
   geonature-backend:
     <<: [*restart-policy, *geonature-backend-defaults]
@@ -152,34 +138,20 @@ services:
       <<: *geonature-depends-on-defaults
       geonature-install-db:
         condition: service_completed_successfully
-    entrypoint: []
-    command:
-      - "gunicorn"
-      - "geonature:create_app()"
-      - "--name=geonature"
-      - "--workers=2"
-      - "--threads=2"
-      - "--access-logfile=-"
-      - "--bind=0.0.0.0:8000"
-      - "--reload"
-      - "--reload-extra-file=${GEONATURE_CONFIG_FILE:-/dist/config/geonature_config.toml}"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.geonature-backend.rule=Host(`${GEONATURE_BACKEND_HOST}`) && PathPrefix(`${GEONATURE_BACKEND_PREFIX}`)"
-      - "traefik.http.routers.geonature-backend.entrypoints=websecure"
-      - "traefik.http.routers.geonature-backend.tls.certResolver=acme-resolver"
+    # FIXME: manage this upstream, and handle module config files!!
+    #   - "--reload-extra-file=${GEONATURE_CONFIG_FILE:-/dist/config/geonature_config.toml}"
+    ports:
+      - ${GEONATURE_BACKEND_PORT}:8000
 
   geonature-frontend:
     <<: *restart-policy
-    image: ${GEONATURE_FRONTEND_EXTRA_IMAGE}
+    image: ${GEONATURE_FRONTEND_IMAGE:-ghcr.io/pnx-si/geonature-frontend-extra:latest}
+    ports:
+      - ${GEONATURE_FRONTEND_PORT}:4200
     environment:
-      - NGINX_LOCATION=${GEONATURE_FRONTEND_PREFIX}
-      - API_ENDPOINT="${GEONATURE_BACKEND_PROTOCOL}://${GEONATURE_BACKEND_HOSTPORT}${GEONATURE_BACKEND_PREFIX}"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.geonature.rule=Host(`${GEONATURE_FRONTEND_HOST}`) && PathPrefix(`${GEONATURE_FRONTEND_PREFIX}`)"
-      - "traefik.http.routers.geonature.entrypoints=websecure"
-      - "traefik.http.routers.geonature.tls.certResolver=acme-resolver"
+      <<: *env
+      GEONATURE_FRONTEND_PREFIX: ${GEONATURE_FRONTEND_PREFIX}
+      API_ENDPOINT: ${GEONATURE_API_ENDPOINT}
 
 volumes:
   redis:
