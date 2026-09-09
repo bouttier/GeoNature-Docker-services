@@ -6,9 +6,6 @@
 #   est fait pour le development et pas la production, déployer ce fichier dans un environnement de production présente
 #   des risques de sécurité.
 #
-# Prérequis :
-#   Utilisation de traefik (et donc de docker-compose.traefik.yaml)
-#
 # Accès :
 #   https://<GEONATURE_BACKEND_HOST>/flower
 #
@@ -25,12 +22,8 @@ services:
         FLOWER_URL_PREFIX: /flower
       depends_on:
         - geonature-worker
-        - traefik
-      networks:
-        - gn
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.flower.rule=Host(`${GEONATURE_BACKEND_HOST}`) && PathPrefix(`/flower`)"
         - "traefik.http.routers.flower.entrypoints=websecure"
-        - "traefik.http.routers.flower.tls.certResolver=acme-resolver"
         - "traefik.http.services.flower.loadbalancer.server.port=5555"
