@@ -1,6 +1,6 @@
 [submodule "GeoNature-extra"]
 	path = GeoNature-extra
-	url = https://github.com/bouttier/GeoNature.git
+	url = https://github.com/bouttier/GeoNature-extra.git
 [submodule "UsersHub"]
 	path = UsersHub
-	url = ./UsersHub
+	url = https://github.com/PnX-SI/UsersHub.git
