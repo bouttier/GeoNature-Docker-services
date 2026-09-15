@@ -138,8 +138,6 @@ services:
       <<: *geonature-depends-on-defaults
       geonature-install-db:
         condition: service_completed_successfully
-    # FIXME: manage this upstream, and handle module config files!!
-    #   - "--reload-extra-file=${GEONATURE_CONFIG_FILE:-/dist/config/geonature_config.toml}"
     ports:
       - ${GEONATURE_BACKEND_PORT}:8000
 
@@ -150,7 +148,7 @@ services:
       - ${GEONATURE_FRONTEND_PORT}:4200
     environment:
       <<: *env
-      GEONATURE_FRONTEND_PREFIX: ${GEONATURE_FRONTEND_PREFIX:-}
+      GEONATURE_FRONTEND_PREFIX: ${GEONATURE_FRONTEND_PREFIX:-/}
       API_ENDPOINT: ${GEONATURE_API_ENDPOINT}
 
 volumes:
