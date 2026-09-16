@@ -25,12 +25,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install packages
-        run: sudo apt-get update && sudo apt-get install -y make jq git-lfs curl
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      #
+      # - name: Install packages
+      #   run: sudo apt-get update && sudo apt-get install -y jq curl
 
       - name: Build and start stack (${{ matrix.config.name }})
         env:
@@ -39,12 +36,14 @@ jobs:
         run: |
           cp .env.sample .env
           if [ "${traefik}" = true ]; then
-            sed -i 's/#.*\(COMPOSE_FILE=.*:docker-compose.traefik.yml.*\)/\1/' .env.sample
+            sed -i 's/.*\(COMPOSE_FILE=.*:docker-compose.traefik.yml.*\)/\1/' .env
           fi
           if [ "${mode}" = "dev" ]; then
-            sed -i 's/#.*\(COMPOSE_FILE=.*:docker-compose.dev.yml.*\)/\1/' .env.sample
+            sed -i 's/.*\(COMPOSE_FILE=.*:docker-compose.dev.yml.*\)/\1/' .env
           fi
-          docker config
+          echo "GEONATURE_BACKEND_EXTRA_IMAGE=${GEONATURE_BACKEND_EXTRA_IMAGE}" >> .env
+          echo "GEONATURE_FRONTEND_EXTRA_IMAGE=${GEONATURE_FRONTEND_EXTRA_IMAGE}" >> .env
+          docker compose config
 
       # - name: Wait for services to be running
       #   run: |
