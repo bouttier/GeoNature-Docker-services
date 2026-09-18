@@ -1,0 +1,5 @@
+services:
+  geonature-install-db:
+    environment:
+      GEONATURE_SKIP_POPULATE_DB: true
+    command: [ '/bin/sh', '-c', 'touch /tmp/db-populated && sleep infinity' ]
