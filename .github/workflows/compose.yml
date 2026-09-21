@@ -39,6 +39,8 @@ jobs:
           GEONATURE_FRONTEND_EXTRA_IMAGE: ghcr.io/bouttier/geonature-frontend-extra:develop
         run: |
           cp .env.sample .env
+          sed  -i 's/.*\(GEONATURE_FRONTEND_PREFIX=.*\)/GEONATURE_FRONTEND_PREFIX=\/geonature/' .env
+          sed  -i 's/.*\(GEONATURE_BACKEND_PREFIX=.*\)/GEONATURE_BACKEND_PREFIX=\/geonature\/api/' .env
           if [ "${traefik}" = true ]; then
             sed -i 's/.*\(COMPOSE_FILE=.*:docker-compose.traefik.yml.*\)/\1/' .env
             sed -i 's/.*\(TRAEFIK_HTTP_PORT=.*\)/TRAEFIK_HTTP_PORT=8080/' .env
